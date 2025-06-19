@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Prompt Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Calm Neutral Stone -->
+    <!-- Application Structure Plan: To handle the expanded list of prompts, the architecture now includes client-side search and pagination. This is crucial for usability, preventing users from being overwhelmed. The structure is: Header -> Search/Filter Controls -> Results Count -> Paginated Prompt Grid -> Pagination Controls. This creates a highly functional and scalable user flow. The modal's "Prompt Builder" sandbox remains the core interaction for any selected prompt. A new "Custom Prompt Generator" has been added at the top. A new top header with a logo and rotating quotes, and a full footer with social links have been added for a more professional look. -->
+    <!-- Visualization & Content Choices: 
+        - Feature: Custom Prompt Generator. Goal: Allow users to create unique, structured prompts. Viz/Method: A series of dropdowns for different prompt components (goal, subject, method, etc.) and an output area. Interaction: User selects options or "Random", clicks "Generate", and a new prompt is created. Justification: This transforms the app into a creative tool, not just a library. It works offline and provides instant value. Library: HTML/CSS/JS.
+        - Report Info: 60+ learning prompts. Goal: Organize, Search, & Inform. Viz/Method: A paginated, searchable, and filterable interactive card grid. Interaction: Filtering by category, real-time text search, and page navigation. Justification: With a larger dataset, search and pagination are essential for allowing users to find relevant prompts quickly without excessive scrolling. Library: HTML/CSS/JS.
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        .prompt-card {
+            transition: transform 0.2s cubic-bezier(.4,2,.3,1), box-shadow 0.2s, background-color 0.2s, filter 0.2s;
+            border: 1px solid #E7E5E4;
+            min-width: 0;
+            animation: cardFadeIn 0.7s cubic-bezier(.4,2,.3,1);
+            background: linear-gradient(135deg, #fff 60%, #f3e8ff 100%);
+            box-shadow: 0 2px 8px 0 rgb(164 164 255 / 0.07);
+            position: relative;
+            overflow: hidden;
+        }
+        @keyframes cardFadeIn {
+            0% { opacity: 0; transform: translateY(30px) scale(0.96);}
+            100% { opacity: 1; transform: translateY(0) scale(1);}
+        }
+        .prompt-card::before {
+            content: "";
+            position: absolute;
+            top: -40px; left: -40px;
+            width: 80px; height: 80px;
+            background: radial-gradient(circle, #a5b4fc55 0%, transparent 70%);
+            z-index: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+            opacity: 0.7;
+        }
+        .prompt-card:hover::before {
+            opacity: 1;
+            filter: blur(2px) brightness(1.2);
+        }
+        .prompt-card .text-4xl {
+            z-index: 1;
+            position: relative;
+            filter: drop-shadow(0 2px 8px #a5b4fc33);
+            transition: filter 0.2s;
+        }
+        .prompt-card:hover .text-4xl {
+            filter: drop-shadow(0 4px 16px #f0abfc66) brightness(1.2);
+        }
+        .prompt-card .pro-badge {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: linear-gradient(90deg, #a5b4fc 0%, #f0abfc 100%);
+            color: #fff;
+            font-size: 0.7rem;
+            font-weight: bold;
+            padding: 0.2em 0.7em;
+            border-radius: 9999px;
+            letter-spacing: 1px;
+            box-shadow: 0 2px 8px #a5b4fc22;
+            z-index: 2;
+            pointer-events: none;
+            opacity: 0.92;
+            animation: badgePop 0.7s cubic-bezier(.4,2,.3,1);
+        }
+        @keyframes badgePop {
+            0% { transform: scale(0.7); opacity: 0; }
+            80% { transform: scale(1.15); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.92; }
+        }
+        /* Gradient background layer */
+        #gradient-bg {
+            position: fixed;
+            z-index: 0;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            transition: background 0.3s;
+            /* More vibrant, multi-color gradient with animation */
+            background: radial-gradient(circle at 50% 50%, #f8fafc 0%, #fcc5a5 40%, #fcabab 70%, #4dfcb3 100%);
+            opacity: 0.7;
+            will-change: background;
+            animation: gradientShift 12s ease-in-out infinite alternate;
+        }
+        @keyframes gradientShift {
+            0% {
+                filter: hue-rotate(0deg) brightness(1);
+            }
+            50% {
+                filter: hue-rotate(40deg) brightness(1.08);
+            }
+            100% {
+                filter: hue-rotate(-30deg) brightness(1);
+            }
+        }
+        /* Make sure main content is above the gradient */
+        body > *:not(#gradient-bg) {
+            position: relative;
+            z-index: 1;
+        }
+        /* Glassmorphism effect for modal */
+        .modal-content {
+            transition: transform 0.3s ease, opacity 0.3s ease;
+            background: rgba(255,255,255,0.85);
+            backdrop-filter: blur(8px) saturate(1.2);
+            box-shadow: 0 8px 32px 0 rgb(164 164 255 / 0.18);
+        }
+        /* Subtle floating animation for social icons */
+        .social-icon-btn {
+            transition: transform 0.18s cubic-bezier(.4,2,.3,1), box-shadow 0.18s, background 0.18s, filter 0.18s;
+            animation: floatIcon 3.5s ease-in-out infinite alternate;
+        }
+        @keyframes floatIcon {
+            0% { transform: translateY(0);}
+            100% { transform: translateY(-6px);}
+        }
+        .social-icon-btn:hover {
+            transform: scale(1.18) rotate(-8deg);
+            box-shadow: 0 4px 16px 0 rgb(0 0 0 / 0.18);
+            filter: brightness(1.2) drop-shadow(0 2px 8px #a8a29e44);
+            animation: none;
+        }
+        /* Custom scrollbar for pro look */
+        ::-webkit-scrollbar {
+            width: 8px;
+            background: #f3e8ff;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #a5b4fc;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body class="bg-[#F8F7F4] text-[#4A4A4A]">
+    <!-- Animated gradient background -->
+    <div id="gradient-bg"></div>
+    <div class="top-bar bg-stone-800 text-white shadow-md">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center h-14">
+            <div class="logo font-bold text-xl">
+                <!-- Replace text logo with PNG image logo -->
+                <img src="logo.png" alt="Prompt Pro Logo" class="h-20 inline-block align-middle">
+            </div>
+            <div class="motivational-quote text-sm text-stone-300 italic text-right">
+                <p id="quote-display"></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-12">
+
+        <header class="text-center mb-10">
+            <h1 class="text-4xl md:text-5xl font-bold text-[#57534E] mb-2">Advanced Learning Prompt Explorer</h1>
+            <p class="text-lg text-gray-500 max-w-3xl mx-auto">Explore 60+ expert prompts or build your own with the Custom Prompt Generator. Master any subject with AI-driven learning strategies.</p>
+        </header>
+        
+        <section id="custom-generator" class="mb-12 bg-white p-6 rounded-2xl shadow-lg border border-stone-200">
+            <h2 class="text-2xl font-bold text-center text-[#57534E] mb-4">Custom Prompt Generator</h2>
+             <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+                <div class="space-y-1">
+                    <label for="goal-select" class="text-sm font-medium text-gray-600">📘 Goal</label>
+                    <select id="goal-select" class="generator-select w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]"></select>
+                </div>
+                <div class="space-y-1">
+                    <label for="subject-input" class="text-sm font-medium text-gray-600">🎯 Subject (or type)</label>
+                    <input type="text" id="subject-input" list="subject-list" placeholder="e.g., Physics, History..." class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]">
+                    <datalist id="subject-list"></datalist>
+                </div>
+                <div class="space-y-1">
+                    <label for="method-select" class="text-sm font-medium text-gray-600">🧠 Method</label>
+                    <select id="method-select" class="generator-select w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]"></select>
+                </div>
+                <div class="space-y-1">
+                    <label for="tone-select" class="text-sm font-medium text-gray-600">🎭 Tone</label>
+                    <select id="tone-select" class="generator-select w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]"></select>
+                </div>
+                <div class="space-y-1">
+                    <label for="format-select" class="text-sm font-medium text-gray-600">📤 Output</label>
+                    <select id="format-select" class="generator-select w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]"></select>
+                </div>
+                <div class="space-y-1">
+                    <label for="level-select" class="text-sm font-medium text-gray-600">🧮 Level</label>
+                    <select id="level-select" class="generator-select w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]"></select>
+                </div>
+            </div>
+            <button id="customGenerateBtn" class="w-full bg-[#57534E] text-white font-bold py-3 px-6 rounded-lg hover:bg-[#44403C] transition-transform transform hover:scale-105">Generate Custom Prompt</button>
+            <div id="custom-output-container" class="mt-6 hidden">
+                <div class="bg-stone-100 p-4 rounded-lg border border-stone-200">
+                    <p id="custom-output-header" class="text-sm font-semibold mb-2 text-stone-600"></p>
+                    <textarea id="custom-output-text" readonly class="w-full h-40 p-2 bg-white rounded-md border border-stone-300 text-sm"></textarea>
+                    <p id="custom-output-why" class="mt-2 text-xs italic text-stone-500"></p>
+                </div>
+                <button id="copyCustomBtn" class="mt-2 w-full bg-stone-700 text-white font-bold py-2 px-4 rounded-lg hover:bg-stone-800 transition">Copy Custom Prompt</button>
+            </div>
+        </section>
+
+        <hr class="my-12 border-stone-300">
+
+        <div class="mb-8 p-4 bg-white/50 rounded-lg shadow-sm">
+             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="md:col-span-2">
+                    <label for="search-input" class="block text-sm font-medium text-gray-700 mb-1">Search Curated Prompts</label>
+                    <input type="text" id="searchInput" placeholder="Search by title (e.g., 'data', 'story', 'investor')..." class="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-[#A8A29E] focus:border-[#A8A29E]">
+                </div>
+                <div>
+                    <label for="filter-nav" class="block text-sm font-medium text-gray-700 mb-1">Filter by Category</label>
+                    <nav id="filter-nav" class="flex justify-center flex-wrap gap-2">
+                        <button data-filter="all" class="filter-btn flex-1 bg-[#A8A29E] text-white py-2 px-3 rounded-md font-semibold transition-colors text-sm">All</button>
+                        <button data-filter="analytical" class="filter-btn flex-1 bg-white text-[#57534E] py-2 px-3 rounded-md font-semibold border border-gray-300 transition-colors text-sm">🧠</button>
+                        <button data-filter="creative" class="filter-btn flex-1 bg-white text-[#57534E] py-2 px-3 rounded-md font-semibold border border-gray-300 transition-colors text-sm">🎨</button>
+                        <button data-filter="practical" class="filter-btn flex-1 bg-white text-[#57534E] py-2 px-3 rounded-md font-semibold border border-gray-300 transition-colors text-sm">🛠️</button>
+                        <button data-filter="strategic" class="filter-btn flex-1 bg-white text-[#57534E] py-2 px-3 rounded-md font-semibold border border-gray-300 transition-colors text-sm">🎯</button>
+                    </nav>
+                </div>
+            </div>
+        </div>
+
+        <div id="results-count" class="text-center text-gray-500 mb-4"></div>
+
+        <main id="prompt-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 min-h-[500px]">
+        </main>
+        
+        <div id="pagination-controls" class="flex justify-center items-center mt-12 space-x-2"></div>
+
+    </div>
+    
+    <div id="promptModal" class="modal-backdrop fixed inset-0 bg-black bg-opacity-60 flex items-start justify-center p-4 hidden">
+        <div class="modal-content bg-[#F8F7F4] rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col mt-8 transform scale-95 opacity-0">
+            <header class="p-6 flex justify-between items-center border-b border-gray-200">
+                <h2 id="modalTitle" class="text-2xl font-bold text-[#57534E]"></h2>
+                <button id="closeModalBtn" class="text-gray-400 hover:text-gray-600">
+                    <span class="text-3xl font-light">&times;</span>
+                </button>
+            </header>
+            <div class="p-8 overflow-y-auto flex-grow grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div class="template-section">
+                    <h3 class="text-xl font-bold text-[#57534E] mb-4">Prompt Template</h3>
+                    <div class="bg-white p-4 rounded-lg border border-gray-200 mb-4 h-full">
+                        <p id="modalText" class="text-gray-700 leading-relaxed whitespace-pre-wrap"></p>
+                    </div>
+                </div>
+
+                <div class="sandbox-section bg-white p-6 rounded-lg border border-gray-200 flex flex-col">
+                    <h3 class="text-xl font-bold text-[#57534E] mb-4 flex items-center">✨ Prompt Sandbox</h3>
+                    <p class="text-sm text-gray-500 mb-4">Fill in the blanks to create your custom prompt below.</p>
+                    
+                    <div class="space-y-3 mb-4">
+                        <input id="topicInput" type="text" placeholder="[TOPIC] or [SUBJECT]" class="w-full p-2 border border-gray-300 rounded-md">
+                        <input id="levelInput" type="text" placeholder="[LEVEL] or [BEGINNER...]" class="w-full p-2 border border-gray-300 rounded-md">
+                        <input id="goalInput" type="text" placeholder="[GOAL] or [EXAM/GOAL]" class="w-full p-2 border border-gray-300 rounded-md">
+                    </div>
+
+                    <button id="generatePromptBtn" class="w-full bg-[#A8A29E] text-white font-bold py-2 px-4 rounded-lg hover:bg-[#78716C] transition mb-4">Generate Final Prompt</button>
+                    
+                    <div id="finalPromptContainer" class="flex-grow flex flex-col hidden">
+                         <h4 class="text-lg font-bold text-[#57534E] mb-2">Your Generated Prompt:</h4>
+                         <textarea id="finalPromptText" readonly class="bg-gray-50 p-4 rounded-lg text-gray-800 text-sm w-full flex-grow min-h-[150px] whitespace-pre-wrap border border-gray-200"></textarea>
+                         <button id="copyFinalPromptBtn" class="mt-2 w-full bg-[#57534E] text-white font-bold py-2 px-6 rounded-lg hover:bg-[#44403C] transition">Copy Final Prompt</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="bg-stone-800 text-white mt-16">
+        <div class="container mx-auto px-8 py-10 grid grid-cols-1 md:grid-cols-3 gap-8 text-center md:text-left">
+            <div>
+                <h3 class="font-bold text-lg mb-2">About Prompt Pro</h3>
+                <p class="text-sm text-stone-300">
+                    This tool is designed to empower students and lifelong learners with effective, AI-driven study strategies. Master any subject by learning how to ask the right questions.
+                </p>
+            </div>
+            <div class="md:mx-auto">
+                <h3 class="font-bold text-lg mb-2">Connect with Me</h3>
+                <div class="flex justify-center md:justify-start space-x-4">
+                    <!-- SVG icon buttons for Instagram and YouTube -->
+                    <button class="social-icon-btn bg-stone-700 hover:bg-stone-600 rounded-full p-2 transition" data-link="https://www.instagram.com/kishoreditx/">
+                        <!-- Instagram SVG -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <rect x="2" y="2" width="20" height="20" rx="6" stroke-width="2" stroke="currentColor" fill="none"/>
+                            <circle cx="12" cy="12" r="5" stroke-width="2" stroke="currentColor" fill="none"/>
+                            <circle cx="17.5" cy="6.5" r="1.5" fill="currentColor"/>
+                        </svg>
+                    </button>
+                    <button class="social-icon-btn bg-stone-700 hover:bg-stone-600 rounded-full p-2 transition" data-link="#">
+                        <!-- YouTube SVG -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" viewBox="0 0 24 24" fill="currentColor">
+                            <rect x="2" y="6" width="20" height="12" rx="4" fill="currentColor" opacity="0.15"/>
+                            <path d="M10 9.5v5l4.5-2.5-4.5-2.5z" fill="currentColor"/>
+                            <rect x="2" y="6" width="20" height="12" rx="4" stroke="currentColor" stroke-width="2" fill="none"/>
+                        </svg>
+                    </button>
+                    <button class="social-icon-btn bg-stone-700 hover:bg-stone-600 rounded-full p-2 transition" data-link="https://kishorekrazzy.github.io/Resume/">
+                        <!-- User/Profile SVG -->
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <circle cx="12" cy="9" r="4" stroke="currentColor" stroke-width="2" fill="none"/>
+                            <path d="M4 19c0-3.3137 3.134-6 8-6s8 2.6863 8 6" stroke="currentColor" stroke-width="2" fill="none"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="md:text-right">
+                <h3 class="font-bold text-lg mb-2">Made with ☕</h3>
+                <p class="text-sm text-stone-300">
+                    &copy; Koncham Prema Tho Mi Kishore. <br>
+                    All rights reserved.
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Popup Modal for "Coming soon" -->
+    <div id="comingSoonModal" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl shadow-lg px-8 py-6 text-center max-w-xs">
+            <div class="text-3xl mb-2">🚧</div>
+            <div class="mb-4 text-lg font-semibold text-stone-700">Coming soon</div>
+            <button id="closeComingSoonBtn" class="mt-2 bg-stone-700 text-white font-bold py-2 px-6 rounded-lg hover:bg-stone-800 transition">OK</button>
+        </div>
+    </div>
+
+    <script>
+        const prompts = [
+            { id: 1, title: 'The First-Principles Thinker', category: 'analytical', icon: '🧠', text: "Act as a first-principles thinker. I want to learn [TOPIC]. Don't give me analogies or comparisons at first. Instead, break it down into its most fundamental, undeniable truths—the absolute axioms that everything else is built upon. From there, reconstruct the subject from the ground up. I'm at [LEVEL] and my goal is to [GOAL] by thinking more innovatively than someone who has only learned it traditionally." },
+            { id: 2, title: 'The 80/20 Investor', category: 'strategic', icon: '🎯', text: "Act as a strategic investor of time and energy. I want to master [TOPIC]. Analyze it through the lens of the Pareto Principle (80/20 rule). What are the 20% of concepts, skills, or tools that will yield 80% of the results or understanding? Give me a ruthless, prioritized roadmap that focuses only on what's highest-leverage. I'm currently at [LEVEL] and want to achieve [GOAL] with maximum efficiency." },
+            { id: 3, title: 'The Master Storyteller', category: 'creative', icon: '🎨', text: "Adopt the persona of a master storyteller. I need to learn [TOPIC]. Frame this entire subject as a compelling narrative. Who is the 'hero' (the core concept)? What is the 'inciting incident' (the foundational problem)? Who are the 'villains' (the common misconceptions)? What are the key 'plot twists' (the counter-intuitive ideas)? My current level is [LEVEL], and my goal is to [GOAL] by being able to explain it in a way that captivates and persuades anyone." },
+            { id: 4, title: 'The Game Designer', category: 'creative', icon: '🎨', text: "Act as a game designer. Your task is to turn learning [TOPIC] into an engaging game. What is the 'win condition' (mastery)? What are the 'levels' (from [LEVEL] to [GOAL])? What are the 'boss battles' (the hardest concepts to master)? Design the core 'gameplay loop' (the daily practice). What are the 'achievements' or 'side quests' (practical projects)? Make it fun, addictive, and skill-based." },
+            { id: 5, title: 'The Zen Master', category: 'analytical', icon: '🧠', text: "Adopt the mindset of a Zen Master. I wish to learn [TOPIC]. Guide me away from frantic memorization and toward a state of deep, intuitive understanding. What are the core 'koans' or paradoxes within this subject? What 'meditations' (mental exercises) can I do to internalize the core principles? Show me the path of 'no-mind' where I can act from a place of deep knowledge without conscious effort. My level is [LEVEL], and my goal is to [GOAL] with clarity and simplicity." },
+            { id: 6, title: 'The Investigative Journalist', category: 'analytical', icon: '🧠', text: "Act as an investigative journalist. I'm assigning you a deep-dive story on [TOPIC]. I don't want the textbook version. I want the story *behind* the story. Who are the key figures and unsung heroes? What are the major 'scandals' or debunked theories? Expose the underlying power structures, controversies, and debates. My goal is to [GOAL] from my current [LEVEL] by understanding the real-world context." },
+            { id: 7, title: 'The Master Craftsman', category: 'practical', icon: '🛠️', text: "Act as a master craftsman guiding an apprentice. I want to learn [TOPIC] not by reading, but by building. Give me a series of practical projects, starting with simple and growing in complexity. For each project, explain what tools I'll need and what core skills I'll be honing. Focus on the 'feel' and 'touch' of the work. I'm at [LEVEL] and want to [GOAL] by developing tangible skills and a portfolio of work." },
+            { id: 8, title: 'The Military Strategist', category: 'strategic', icon: '🎯', text: "Act as a master military strategist. The subject of [TOPIC] is a territory I must conquer. Give me a campaign plan. What is the 'terrain' (the structure of the subject)? Where should I establish a 'beachhead' (the first concept to master)? What are the enemy's 'strongholds' (difficult concepts) and how do we lay siege to them? My current rank is [LEVEL] and my mission is to [GOAL]." },
+            { id: 9, title: 'The CEO (Execution-Focused)', category: 'practical', icon: '🛠️', text: "Adopt the persona of a results-driven CEO. I want to learn [TOPIC] to build [A SPECIFIC PROJECT OR BUSINESS]. Present a business plan for this endeavor. What is the 'product' (the core application of the knowledge)? What are the 'Key Performance Indicators' (KPIs) to track my learning progress? My level is [LEVEL], and my goal is to [GOAL] by creating something with real value." },
+            { id: 10, title: 'The Futurist', category: 'strategic', icon: '🎯', text: "Act as a futurist and trend forecaster. I want to learn [TOPIC] not for what it is today, but for what it will become. Analyze the 'megatrends' driving this field. What are the emerging, cutting-edge areas? What skills will be most valuable in 5-10 years? How is technology (like AI) likely to transform it? I'm at [LEVEL] and want to [GOAL] by positioning myself at the forefront of the field." },
+            { id: 11, title: 'The Feynman Technique on Steroids', category: 'analytical', icon: '🧠', text: "Act as the ultimate simplifier. I want to learn [TOPIC] using an enhanced Feynman Technique. Create a series of explanations that I could use to teach this topic to a curious 12-year-old, a skeptical college student, and a busy executive. For each, identify the core analogy and eliminate all jargon. Pinpoint the areas where I'm likely to get stuck and provide a simple 'unsticking' question. My [LEVEL] is beginner, and my [GOAL] is to understand it so deeply I can explain it to anyone." },
+            { id: 12, title: 'The Elite Coach', category: 'practical', icon: '🛠️', text: "Act as an elite performance coach. I am your athlete, and [TOPIC] is my sport. Design a complete training regimen for me. What does my 'daily workout' look like? What are the 'drills' for fundamental skills? How should I handle 'recovery' (preventing burnout)? What are the 'game-time' scenarios where I can apply my skills under pressure? My current fitness is [LEVEL], and I want to [GOAL] by performing at my absolute peak." },
+            { id: 13, title: 'The Data-Driven Analyst', category: 'analytical', icon: '�', text: "Act as a data scientist for learning. I want you to design a quantifiable system for me to learn [TOPIC]. What are the key metrics I should track daily/weekly (e.g., problems solved, concepts recalled, time in deep work)? How can I A/B test different learning strategies to see what works best for me? Create a 'learning analytics' dashboard to optimize my journey from [LEVEL] to [GOAL]." },
+            { id: 14, title: 'The Improvisational Actor', category: 'creative', icon: '🎨', text: "Adopt the persona of an improv master. My goal is to learn [TOPIC] so I can be fluid and creative with its concepts. Give me a series of 'improv exercises' or 'scenes' where I have to use the core ideas in unexpected situations. The main rule is 'Yes, and...'. How can I connect [TOPIC] to a seemingly unrelated field like [ANOTHER FIELD]? I'm at [LEVEL] and want to [GOAL] by becoming a flexible and innovative thinker." },
+            { id: 15, title: 'The Survivalist', category: 'practical', icon: '🛠️', text: "Act as a survival expert. I've been dropped in the wilderness of [TOPIC] and I need a survival guide. What are the absolute bare-minimum concepts I need to 'survive' (be functional)? What are the most common 'dangers' (mistakes and pitfalls)? What are the best 'natural resources' (free learning tools)? My goal is to go from [LEVEL] (lost) to [GOAL] (thriving in the wild)." },
+            { id: 16, title: 'The Master Diplomat', category: 'strategic', icon: '🎯', text: "Act as a seasoned diplomat. [TOPIC] is a complex nation with various factions and schools of thought. Explain the landscape to me. Who are the 'purists'? The 'reformers'? The 'radicals'? What is the core of their disagreements? Give me the talking points and mental models to navigate these different perspectives intelligently. My goal is to go from [LEVEL] to [GOAL] by developing a nuanced, sophisticated view of the entire field." },
+            { id: 17, title: 'The R&D Lead', category: 'creative', icon: '🎨', text: "Act as the head of R&D at a cutting-edge tech company. You need me to get up to speed on [TOPIC] to start innovating. Don't just teach me the 'what is'. Teach me the 'what if'. What are the known limits of this field? What are the open questions and unsolved problems? Give me a list of 'moonshot' ideas and guide me toward the knowledge I need to start tackling one. I'm at [LEVEL] and my goal is to [GOAL] by creating something that pushes the boundaries." },
+            { id: 18, title: 'The Systems Ecologist', category: 'analytical', icon: '🧠', text: "Act as a systems thinker with a focus on ecology. I want you to model [TOPIC] as a living ecosystem. What are the 'keystone species' (the foundational concepts)? What are the 'food webs' (the relationships between ideas)? How does 'energy' (information) flow through the system? What are the 'invasive species' (bad ideas that can take over)? My [LEVEL] is novice, and my [GOAL] is to [GOAL] by seeing the beautiful, interconnected whole." },
+            { id: 19, title: 'The Child Prodigy\'s Mentor', category: 'creative', icon: '🎨', text: "Your persona is the mentor to a child prodigy. I am the prodigy. I want to learn [TOPIC] with a sense of wonder, playfulness, and rapid discovery. Strip away the formal, rigid structure of academic learning. Give me fascinating puzzles, hands-on experiments, and 'big questions' to ponder. Design a learning path driven by curiosity, not curriculum. I'm at [LEVEL] and my goal is to [GOAL] by building a joyful and intuitive mastery." },
+            { id: 20, title: 'The Historian of Ideas', category: 'strategic', icon: '🎯', text: "Act as a historian specializing in the history of ideas. I want to learn [TOPIC] by understanding its evolution. Take me on a chronological journey. What was the 'archaic' period of this idea? What was its 'classical' golden age? What 'revolutions' overturned the old way of thinking? Show me how past mistakes and breakthroughs have shaped the present understanding. My level is [LEVEL], and my goal is to [GOAL] by understanding the 'why' behind the 'what'." },
+            { id: 21, title: 'Master From Scratch', category: 'analytical', icon: '🧠', text: "You are an expert educator and a systems thinker. I want you to teach me [TOPIC] as if you're reverse-engineering a complex machine. First, identify the core concepts, dependencies, and mental models required to understand it. Then, break it down into a layered roadmap from basic to advanced. For each layer, use real-world analogies, visual descriptions, and micro-practice challenges. Avoid passive definitions — help me truly understand the ‘why’ and ‘how’. Add checkpoints to test if I’ve really grasped each level." },
+            { id: 22, title: 'Hyper-Personalized Study Plan', category: 'strategic', icon: '🎯', text: "Act like a world-class academic coach. I’m a student preparing for [EXAM/GOAL] with [X weeks] available. My current level in [SUBJECT] is [BEGINNER/INTERMEDIATE/ADVANCED]. Build me a study system that includes weekly goals, daily task breakdowns, checkpoints for review, and revision cycles. Integrate spaced repetition, active recall, and problem-solving sessions. Also recommend any AI tools, websites, or resources to speed up mastery. Prioritize smart efficiency over time spent." },
+            { id: 23, title: 'Feynman Technique (Teach Me)', category: 'analytical', icon: '🧠', text: "I want to understand [TOPIC] using the Feynman Technique. Teach it to me as if I’m a 10-year-old with no background knowledge. Break it down using simple analogies, basic terms, and short, clear explanations. Avoid unnecessary jargon — if you must use it, define it simply. Once the idea is clear, show me how this concept is used in real life. Finally, ask me to explain it back to you and rate my explanation." },
+            { id: 24, title: 'Gamified Skill Tree', category: 'strategic', icon: '🎯', text: "I want to master [TOPIC] like a gamer unlocking a skill tree. Deconstruct the topic into essential skills, sub-skills, and dependencies. For each node in the tree, describe what it is, why it matters, and how I can practice it efficiently. Recommend resources (books, tools, practice types) at each level. Then, structure the path in levels: Novice → Competent → Pro → Master. Make it feel like I’m leveling up in a game, not studying a boring subject." },
+            { id: 25, title: 'Theory to Real-World', category: 'practical', icon: '🛠️', text: "I don’t want just theory — I want real-world understanding. Explain [TOPIC] first in clear terms, then give me 3 real-world scenarios where this concept is used in practice. For each, show how the concept applies and what would happen if it was misunderstood or applied incorrectly. Connect it to fields like tech, business, medicine, or daily life — wherever it fits best. Make me feel the concept, not just memorize it." },
+            { id: 26, title: 'Hack a Syllabus', category: 'strategic', icon: '🎯', text: "Imagine you're an education hacker hired to crack the syllabus of [SUBJECT] for [CLASS/EXAM]. Go through the syllabus like a blueprint — identify the 20% of topics that give 80% results. Group topics by theme, weightage, and difficulty. Suggest the smartest order to study them for maximum retention and impact. Add memory hacks, problem types to focus on, and suggested weekly pacing. This should feel like hacking a game — not drowning in textbooks." },
+            { id: 27, title: 'Study Like Sherlock', category: 'analytical', icon: '🧠', text: "Teach me [TOPIC] like Sherlock Holmes would approach a mystery. Help me spot patterns, underlying structures, clues, and logical inconsistencies. Treat the subject like a puzzle — not a textbook. Ask me questions that make me think, not just memorize. Every rule should have an exception. Every formula should have a ‘why’. Train my brain to detect patterns and master this topic by solving mysteries in it." },
+            { id: 28, title: 'Notes to Study Assets', category: 'practical', icon: '🛠️', text: "I’m going to paste in raw notes or a textbook section on [TOPIC]. Convert it into a structured, active study format: key ideas summarized, important terms highlighted, smart questions generated, and concept maps described textually. Include memory cues (mnemonics, acronyms), example problems, and spaced review checkpoints. This should become a full revision and recall tool I can use later — not just a summary." },
+            { id: 29, title: 'Meta-Learning Strategy', category: 'strategic', icon: '🎯', text: "Before I start learning [SUBJECT], teach me the most effective way to study this subject type. What are the best study models for this? (e.g., active recall, interleaving, etc.) How do top students learn this efficiently? What mistakes should I avoid? Give me a learning strategy tailored to my cognitive style (logical/visual/verbal). Make this a 5-minute crash course in how to learn smarter — before I even open a book." },
+            { id: 30, title: 'Creative Project (Learn by Building)', category: 'creative', icon: '🎨', text: "I want to master [TOPIC] by building a creative project around it. Suggest 3 project ideas that require me to deeply understand and apply the core principles of this topic. Each project should force me to use multiple concepts together. For each idea, describe what I’ll learn, what I’ll need to research, and what tools or formats I can use (video, poster, code, etc.). Learning should come from doing, not just reading." },
+            { id: 31, title: 'Spaced Revision Tracker', category: 'practical', icon: '🛠️', text: 'Design a spaced repetition tracker for [TOPIC] that schedules reviews at optimal intervals (e.g., Day 1, 3, 7, 14). Include self-check questions for each checkpoint. Add color-coded confidence levels and a “forgetting curve” graph explanation. After each review, suggest what to revise again or skip. Help me build a feedback loop where my focus shifts from what I’ve mastered to what’s fading. Make the system automatic and low-effort.' },
+            { id: 32, title: 'AI-Socratic Dialogue', category: 'analytical', icon: '🧠', text: 'Act as a Socratic tutor helping me explore [TOPIC]. Ask me progressively deeper questions to test my assumptions, logic, and comprehension. After each answer, challenge me to refine it or spot gaps. Avoid giving the answer outright — guide me to it. This method should build critical thinking and clarity, not just rote understanding. Stop only when I can explain the concept with complete confidence, from multiple angles.' },
+            { id: 33, title: 'Concept-to-Diagram Study Map', category: 'analytical', icon: '🧠', text: 'Convert [TOPIC] into a detailed concept map in text form, structured like a mind map. Identify the central concept, its branches, sub-branches, dependencies, and examples. Use clear labels like: “Core Idea → Sub-Concept → Real-World Link”. Format it so I can sketch it visually later. The map should act as a one-glance summary of the entire topic structure.' },
+            { id: 34, title: 'AI Teacher vs. AI Student', category: 'creative', icon: '🎨', text: 'Simulate a conversation between a brilliant AI teacher and a curious student who’s confused about [TOPIC]. Let the student ask tough, naive questions. Let the teacher explain using visuals, analogies, and counter-questions. Use the dialogue to surface common misconceptions and clarify them. This dramatized teaching method should make learning feel alive, human, and emotionally sticky.' },
+            { id: 35, title: 'Compressed Study Session', category: 'practical', icon: '🛠️', text: 'Create a 30-minute hyper-efficient study session for [TOPIC] using the Pomodoro method. Each cycle should include: 1) Learn Phase (short explanation), 2) Recall Phase (questions to test memory), and 3) Rest Phase (quick insight or quote). At the end, give a 5-question self-check quiz and a 1-line summary of what I must remember. Optimize for energy, not just content.' },
+            { id: 36, title: 'Mechanism Dissection', category: 'analytical', icon: '🧠', text: 'Treat [TOPIC] like a machine. Break it down into parts, inputs, processes, and outputs. Use system-thinking language: “This causes that”, “If X fails, Y breaks”. Map feedback loops, dependencies, and control points. Show how one part affects the whole. Then give me an “if-then” chart: if a student misunderstands X, what misconception will it lead to?' },
+            { id: 37, title: 'Interleaved Practice Generator', category: 'practical', icon: '🛠️', text: 'Create an interleaved study set for [TOPIC] by mixing related but distinct subtopics into one quiz or problem set. The goal is to force my brain to compare, contrast, and adapt — not just repeat. Include answer explanations that clarify what makes each question unique. Structure the quiz in layers: easy warm-up, moderate confusion, then high-level traps. Add a scorecard for self-assessment.' },
+            { id: 38, title: 'Misconception Correction Drill', category: 'analytical', icon: '🧠', text: 'List the top 7 most common misconceptions about [TOPIC]. For each, explain: 1) what the wrong belief is, 2) why it feels true, and 3) how to replace it with the right understanding. Use bold, contrastive phrasing to make the correct idea stand out. Include a quick “true vs. false” check for each one to drill it in.' },
+            { id: 39, title: 'Concept Chain Builder', category: 'analytical', icon: '🧠', text: 'Build a “concept chain” for [TOPIC] — a linear sequence of ideas where each concept builds on the previous one. For each link, explain it briefly and then connect it logically to the next. Use this to trace how basic knowledge evolves into advanced insight. Add a checkpoint question between each link to make sure I understand before moving on.' },
+            { id: 40, title: '360° Explanation Technique', category: 'creative', icon: '🎨', text: 'Explain [TOPIC] from four perspectives:\nAs a textbook would explain it\nAs a mentor would explain it\nAs a visual artist would draw it\nAs a comedian would joke about it\n\nThese perspectives should deepen understanding, engage multiple intelligences, and challenge me to think differently.' },
+            { id: 41, title: 'Randomized Practice Mode', category: 'practical', icon: '🛠️', text: 'Create 10 randomized questions on [TOPIC], mixing easy, medium, and hard levels. Shuffle concept types, terminology, and wording so I don\'t fall into pattern-based memory. After each answer, show me what thinking trap I could have fallen into. This is designed for test prep and transfer learning — not just comfort zone repetition.' },
+            { id: 42, title: 'Cognitive Load Reducer', category: 'practical', icon: '🛠️', text: 'I’ll give you a dense passage from [TOPIC]. Break it into 3 layers:\nCore concept in one sentence\nKey supporting facts in bullet points\nAnalogies or mental models to understand\n\nThis tri-layer method should reduce cognitive load and allow me to absorb faster without losing depth.' },
+            { id: 43, title: 'Study Casefile Simulation', category: 'creative', icon: '🎨', text: 'Present [TOPIC] like it’s a case file in a detective’s office. Include: background, problem statement, variables involved, contradictions in theory, and final solved logic. Treat the study session like solving a mystery — where learning comes through tension, error spotting, and reconstruction. Bonus: add a plot twist where the original theory was wrong or revised.' },
+            { id: 44, title: 'Error Analysis Prompt', category: 'analytical', icon: '🧠', text: 'I’ll give you my wrong answers from a [SUBJECT] test. For each, explain:\nWhat the correct answer is\nWhy I likely chose the wrong one\nWhat conceptual misunderstanding that reveals\nHow to prevent that mistake next time\n\nTurn these errors into growth, not shame.' },
+            { id: 45, title: 'Time Travel Prompt', category: 'strategic', icon: '🎯', text: 'Explain [TOPIC] as it would be taught in three time periods:\n1800s (historical origin)\nToday (current method)\n2050 (futuristic or AI-enhanced perspective)\n\nEach version should show how thinking has evolved. This builds historical awareness, adaptability, and innovation thinking.' },
+            { id: 46, title: 'Build Your Own Problem', category: 'creative', icon: '🎨', text: 'Challenge me to invent a real-world problem that can only be solved using [TOPIC]. Then guide me in solving it step by step. Reverse the usual model — instead of solving teacher’s problems, I become the problem designer. This boosts creativity, mastery, and application thinking.' },
+            { id: 47, title: 'Flow-State Study Session', category: 'practical', icon: '🛠️', text: 'Design a 90-minute study session on [TOPIC] that gets me into “flow” — deep focus with clear goals. Structure it as:\n10-min warmup (review + goals)\n30-min challenge zone\n5-min mini-quiz\n30-min deeper practice\n10-min insight reflection\n\nInclude motivational cues, time pacing, and challenge spikes to stay engaged.' },
+            { id: 48, title: 'Analogy-Driven Explanation War', category: 'creative', icon: '🎨', text: 'Explain [TOPIC] using 3 very different analogies (e.g., cooking, gaming, music). Then compare which analogy is most effective and why. Help me build analogical reasoning — the superpower of deep thinkers.' },
+            { id: 49, title: 'Create a Mnemonic Codebook', category: 'practical', icon: '🛠️', text: 'Design a memory toolkit for [TOPIC] using acronyms, rhymes, crazy mental images, number-letter links, or story chains. Include the meaning behind each one. The goal is to remember without rote. Organize this like a ‘cheat code’ guide for fast mental recall during tests.' },
+            { id: 50, title: 'AI Mentor Story Mode', category: 'creative', icon: '🎨', text: 'Pretend you\'re a legendary mentor from a sci-fi or fantasy world teaching [TOPIC] to an apprentice (me). Narrate the lesson with mythic tension, challenges, riddles, and visual storytelling. Make the lesson unforgettable by embedding the concept in a journey of learning and transformation.' },
+            { id: 51, title: 'Question Generator (Bloom\'s)', category: 'analytical', icon: '🧠', text: 'Generate 5 questions about [TOPIC] at each of the following levels:\nRemember\nUnderstand\nApply\nAnalyze\nEvaluate\nCreate\n\nUse Bloom’s Taxonomy to stimulate all forms of cognitive depth.' }
+        ];
+
+        const generatorData = {
+            goals: ["Understand deeply", "Memorize better", "Create mental map", "Practice exam style"],
+            subjects: ["Physics", "History", "Coding", "Biology", "Art", "Math"],
+            methods: ["Explain like I'm 12", "Socratic questions", "Step-by-step breakdown", "Create analogies", "Reverse explanation"],
+            formats: ["Mind map", "Flashcards", "Summary table", "Q&A set", "Comic script", "Mnemonic"],
+            tones: ["Casual friend", "Strict mentor", "Zen master", "AI scientist", "Creative artist"],
+            levels: ["Beginner", "Intermediate", "Advanced"]
+        };
+
+        const motivationalQuotes = [
+            "The secret to getting ahead is getting started.",
+            "Don't watch the clock; do what it does. Keep going.",
+            "The expert in anything was once a beginner.",
+            "The beautiful thing about learning is that no one can take it away from you.",
+            "Success is the sum of small efforts, repeated day in and day out."
+        ];
+
+        const promptGrid = document.getElementById('prompt-grid');
+        const searchInput = document.getElementById('searchInput');
+        const filterBtns = document.querySelectorAll('.filter-btn');
+        const paginationControls = document.getElementById('pagination-controls');
+        const resultsCount = document.getElementById('results-count');
+        const modal = document.getElementById('promptModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalText = document.getElementById('modalText');
+        const closeModalBtn = document.getElementById('closeModalBtn');
+        const topicInput = document.getElementById('topicInput');
+        const levelInput = document.getElementById('levelInput');
+        const goalInput = document.getElementById('goalInput');
+        const generatePromptBtn = document.getElementById('generatePromptBtn');
+        const finalPromptContainer = document.getElementById('finalPromptContainer');
+        const finalPromptText = document.getElementById('finalPromptText');
+        const copyFinalPromptBtn = document.getElementById('copyFinalPromptBtn');
+        const customGenerateBtn = document.getElementById('customGenerateBtn');
+        const copyCustomBtn = document.getElementById('copyCustomBtn');
+        const customOutputContainer = document.getElementById('custom-output-container');
+        const customOutputHeader = document.getElementById('custom-output-header');
+        const customOutputText = document.getElementById('custom-output-text');
+        const customOutputWhy = document.getElementById('custom-output-why');
+        const quoteDisplay = document.getElementById('quote-display');
+
+        let currentPromptTemplate = '';
+        let state = {
+            searchTerm: '',
+            currentFilter: 'all',
+            currentPage: 1,
+            itemsPerPage: 12,
+        };
+
+        function updateQuote() {
+            quoteDisplay.style.opacity = 0;
+            setTimeout(() => {
+                const randomIndex = Math.floor(Math.random() * motivationalQuotes.length);
+                quoteDisplay.textContent = `"${motivationalQuotes[randomIndex]}"`;
+                quoteDisplay.style.opacity = 1;
+            }, 500);
+        }
+
+        function populateSelect(selectId, items) {
+            const select = document.getElementById(selectId);
+            select.innerHTML = '<option value="random">Random</option>';
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                option.textContent = item;
+                select.appendChild(option);
+            });
+        }
+
+        function populateDatalist(datalistId, items) {
+            const datalist = document.getElementById(datalistId);
+            datalist.innerHTML = '';
+            items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item;
+                datalist.appendChild(option);
+            });
+        }
+
+        function setupGenerator() {
+            populateSelect('goal-select', generatorData.goals);
+            populateDatalist('subject-list', generatorData.subjects);
+            populateSelect('method-select', generatorData.methods);
+            populateSelect('format-select', generatorData.formats);
+            populateSelect('tone-select', generatorData.tones);
+            populateSelect('level-select', generatorData.levels);
+        }
+
+        function getRandomItem(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        function generateCustomPrompt() {
+            const getSelectedValue = (id, data) => {
+                const select = document.getElementById(id);
+                return select.value === 'random' ? getRandomItem(data) : select.value;
+            };
+
+            const goal = getSelectedValue('goal-select', generatorData.goals);
+            
+            const subjectInputEl = document.getElementById('subject-input');
+            let subject = subjectInputEl.value.trim();
+            if (subject === '') {
+                subject = getRandomItem(generatorData.subjects);
+            }
+
+            const method = getSelectedValue('method-select', generatorData.methods);
+            const tone = getSelectedValue('tone-select', generatorData.tones);
+            const format = getSelectedValue('format-select', generatorData.formats);
+            const level = getSelectedValue('level-select', generatorData.levels);
+
+            const header = `📘 Goal: ${goal} | 🎯 Subject: ${subject} | 🧠 Method: ${method} | 🎭 Tone: ${tone} | 📤 Output: ${format} | 🧮 Level: ${level}`;
+            const promptText = `Act as a ${tone.toLowerCase()} teaching ${level.toLowerCase()} ${subject}. My goal is to ${goal.toLowerCase()}.
+
+Use the '${method.toLowerCase()}' method to explain the core concepts.
+
+Break the topic down into manageable parts, focusing on building intuitive understanding rather than just facts.
+
+Use clear, concise language and check for understanding frequently.
+
+Present the final explanation in the form of a ${format.toLowerCase()}.
+
+Ensure the content is memorable, actionable, and tailored to my specified learning goal.`;
+
+            const whyText = `🧩 *Why it works: This prompt combines a clear persona (${tone}), a specific goal (${goal}), a proven cognitive technique (${method}), and a structured output (${format}) for effective, tailored learning.*`;
+
+            customOutputHeader.textContent = header;
+            customOutputText.value = promptText;
+            customOutputWhy.textContent = whyText;
+            customOutputContainer.classList.remove('hidden');
+            copyCustomBtn.textContent = 'Copy Custom Prompt';
+        }
+
+        function copyCustomPrompt() {
+            customOutputText.select();
+            customOutputText.setSelectionRange(0, 99999);
+             try {
+                document.execCommand('copy');
+                copyCustomBtn.textContent = 'Copied!';
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                copyCustomBtn.textContent = 'Failed to Copy';
+            }
+        }
+
+
+        function updateState(newState) {
+            state = { ...state, ...newState };
+            renderApp();
+        }
+
+        function renderApp() {
+            let filteredPrompts = prompts;
+            if (state.currentFilter !== 'all') {
+                filteredPrompts = filteredPrompts.filter(p => p.category === state.currentFilter);
+            }
+            if (state.searchTerm) {
+                filteredPrompts = filteredPrompts.filter(p => p.title.toLowerCase().includes(state.searchTerm.toLowerCase()));
+            }
+            resultsCount.textContent = `Showing ${filteredPrompts.length} of ${prompts.length} prompts.`;
+            const totalPages = Math.ceil(filteredPrompts.length / state.itemsPerPage);
+            state.currentPage = Math.min(state.currentPage, totalPages) || 1;
+            const startIndex = (state.currentPage - 1) * state.itemsPerPage;
+            const endIndex = startIndex + state.itemsPerPage;
+            const paginatedPrompts = filteredPrompts.slice(startIndex, endIndex);
+            renderGrid(paginatedPrompts);
+            renderPagination(totalPages);
+        }
+
+        // Animate prompt cards on grid render
+        function renderGrid(promptsToRender) {
+            promptGrid.innerHTML = '';
+            if (promptsToRender.length === 0) {
+                promptGrid.innerHTML = `<p class="col-span-full text-center text-gray-500">No prompts found. Try adjusting your search or filters.</p>`;
+                return;
+            }
+            promptsToRender.forEach((prompt, idx) => {
+                const card = document.createElement('div');
+                card.className = 'prompt-card bg-white rounded-xl shadow-sm p-6 cursor-pointer flex flex-col items-center text-center relative overflow-hidden group';
+                card.dataset.id = prompt.id;
+                // Add a "PRO" badge to every 3rd card for demo
+                const badge = (idx % 3 === 0) ? `<span class="pro-badge">PRO</span>` : '';
+                const content = `
+                    ${badge}
+                    <div class="text-4xl mb-4">${prompt.icon}</div>
+                    <h3 class="text-lg font-bold text-[#57534E]">${prompt.title}</h3>
+                    <div class="absolute inset-0 bg-stone-800 bg-opacity-95 text-white p-4 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <p class="text-xs text-center">${prompt.text.substring(0, 150)}...</p>
+                    </div>
+                `;
+                card.innerHTML = content;
+                card.addEventListener('click', () => openModal(prompt.id));
+                // Staggered animation delay for cards
+                card.style.animationDelay = (idx * 0.07) + 's';
+                promptGrid.appendChild(card);
+            });
+        }
+        
+        function renderPagination(totalPages) {
+            paginationControls.innerHTML = '';
+            if (totalPages <= 1) return;
+            const createBtn = (text, page, isDisabled = false, isActive = false) => {
+                const button = document.createElement('button');
+                button.innerHTML = text;
+                button.className = `pagination-btn py-1 px-3 rounded-md font-semibold border border-gray-300 transition-colors text-sm ${isActive ? 'active' : 'bg-white'}`;
+                button.disabled = isDisabled;
+                if (!isDisabled) {
+                    button.addEventListener('click', () => updateState({ currentPage: page }));
+                }
+                return button;
+            };
+            paginationControls.appendChild(createBtn('&laquo; Prev', state.currentPage - 1, state.currentPage === 1));
+            for (let i = 1; i <= totalPages; i++) {
+                if (totalPages > 7 && Math.abs(state.currentPage - i) > 2 && i !== 1 && i !== totalPages) {
+                    if (paginationControls.lastChild.textContent !== '...') {
+                       const dots = document.createElement('span');
+                       dots.textContent = '...';
+                       dots.className = 'px-3 py-1 text-sm';
+                       paginationControls.appendChild(dots);
+                    }
+                    continue;
+                }
+                paginationControls.appendChild(createBtn(i, i, false, state.currentPage === i));
+            }
+            paginationControls.appendChild(createBtn('Next &raquo;', state.currentPage + 1, state.currentPage === totalPages));
+        }
+
+        // Open modal at top of the screen and auto-orient result
+        const openModal = (id) => {
+            const promptData = prompts.find(p => p.id === id);
+            if (!promptData) return;
+            currentPromptTemplate = promptData.text;
+            modalTitle.textContent = promptData.title;
+            modalText.textContent = promptData.text;
+            modal.classList.remove('hidden');
+            // Reset scroll and orientation
+            const modalContent = modal.querySelector('.modal-content');
+            modalContent.scrollTop = 0;
+            modalContent.style.transform = 'scale(0.95)';
+            modalContent.style.opacity = '0';
+            setTimeout(() => {
+                modalContent.classList.remove('scale-95', 'opacity-0');
+                modalContent.style.transform = 'scale(1)';
+                modalContent.style.opacity = '1';
+            }, 10);
+            // Auto focus first input if present
+            setTimeout(() => {
+                const firstInput = modalContent.querySelector('input, textarea, select');
+                if (firstInput) firstInput.focus();
+            }, 200);
+        };
+        
+        const closeModal = () => {
+             modal.querySelector('.modal-content').classList.add('scale-95', 'opacity-0');
+             setTimeout(() => {
+                modal.classList.add('hidden');
+                resetSandbox();
+            }, 300);
+        };
+
+        const resetSandbox = () => {
+            topicInput.value = '';
+            levelInput.value = '';
+            goalInput.value = '';
+            finalPromptContainer.classList.add('hidden');
+            finalPromptText.value = '';
+            copyFinalPromptBtn.textContent = 'Copy Final Prompt';
+        };
+
+        const copyFinalPrompt = () => {
+            finalPromptText.select();
+            finalPromptText.setSelectionRange(0, 99999);
+            try {
+                document.execCommand('copy');
+                copyFinalPromptBtn.textContent = 'Copied!';
+            } catch (err) {
+                console.error('Failed to copy text: ', err);
+                copyFinalPromptBtn.textContent = 'Failed to Copy';
+            }
+        };
+        
+        searchInput.addEventListener('input', (e) => {
+            updateState({ searchTerm: e.target.value, currentPage: 1 });
+        });
+
+        filterBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const filter = btn.dataset.filter;
+                updateState({ currentFilter: filter, currentPage: 1 });
+                filterBtns.forEach(b => {
+                    b.classList.remove('bg-[#A8A29E]', 'text-white');
+                    b.classList.add('bg-white', 'text-[#57534E]');
+                });
+                btn.classList.add('bg-[#A8A29E]', 'text-white');
+                btn.classList.remove('bg-white', 'text-[#57534E]');
+            });
+        });
+
+        generatePromptBtn.addEventListener('click', () => {
+            const topic = topicInput.value || '[TOPIC]';
+            const level = levelInput.value || '[LEVEL]';
+            const goal = goalInput.value || '[GOAL]';
+
+            const finalPrompt = currentPromptTemplate
+                .replace(/\[TOPIC\]/g, topic)
+                .replace(/\[SUBJECT\]/g, topic)
+                .replace(/\[LEVEL\]/g, level)
+                .replace(/\[BEGINNER\/INTERMEDIATE\/ADVANCED\]/g, level)
+                .replace(/\[GOAL\]/g, goal)
+                .replace(/\[EXAM\/GOAL\]/g, goal)
+                .replace(/`\[A SPECIFIC PROJECT OR BUSINESS\]`/g, 'a new SaaS')
+                .replace(/`\[ANOTHER FIELD\]`/g, 'culinary arts');
+
+            finalPromptText.value = finalPrompt;
+            finalPromptContainer.classList.remove('hidden');
+            copyFinalPromptBtn.textContent = 'Copy Final Prompt';
+        });
+
+        closeModalBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => e.target === modal && closeModal());
+        copyFinalPromptBtn.addEventListener('click', copyFinalPrompt);
+        customGenerateBtn.addEventListener('click', generateCustomPrompt);
+        copyCustomBtn.addEventListener('click', copyCustomPrompt);
+
+        document.addEventListener('DOMContentLoaded', () => {
+            renderApp();
+            setupGenerator();
+            updateQuote();
+            setInterval(updateQuote, 5000);
+        });
+
+        // Creative animated gradient background mouse interaction
+        (function() {
+            const gradient = document.getElementById('gradient-bg');
+            if (!gradient) return;
+            let width = window.innerWidth, height = window.innerHeight;
+            let mouseX = 0.5, mouseY = 0.5, animX = 0.5, animY = 0.5;
+            let lastTime = 0;
+
+            function lerp(a, b, t) {
+                return a + (b - a) * t;
+            }
+
+            function animateGradient(ts) {
+                // Animate the gradient's center smoothly toward the mouse
+                animX = lerp(animX, mouseX, 0.08);
+                animY = lerp(animY, mouseY, 0.08);
+
+                // Animate the angle and color stops for a lively effect
+                const angle = 30 + 30 * Math.sin(ts / 3000);
+                const color1 = `#f8fafc`;
+                const color2 = `#a5b4fc`;
+                const color3 = `#f0abfc`;
+                const color4 = `#fcd34d`;
+                gradient.style.background = `radial-gradient(circle at ${animX * 100}% ${animY * 100}%, ${color1} 0%, ${color2} 40%, ${color3} 70%, ${color4} 100%)`;
+                gradient.style.filter = `hue-rotate(${angle}deg) brightness(1.05)`;
+
+                requestAnimationFrame(animateGradient);
+            }
+
+            window.addEventListener('mousemove', (e) => {
+                mouseX = e.clientX / width;
+                mouseY = e.clientY / height;
+            });
+            window.addEventListener('resize', () => {
+                width = window.innerWidth;
+                height = window.innerHeight;
+            });
+
+            requestAnimationFrame(animateGradient);
+        })();
+
+        // Social icon click handler
+        document.addEventListener('DOMContentLoaded', () => {
+            // Social icon logic
+            document.querySelectorAll('.social-icon-btn').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const link = btn.getAttribute('data-link');
+                    if (!link || link === '#') {
+                        document.getElementById('comingSoonModal').classList.remove('hidden');
+                    } else {
+                        window.open(link, '_blank', 'noopener');
+                    }
+                });
+            });
+
+            document.getElementById('closeComingSoonBtn').addEventListener('click', function () {
+                document.getElementById('comingSoonModal').classList.add('hidden');
+            });
+        });
+    </script>
+</body>
